@@ -14,32 +14,66 @@ app.use(express.json());
 
 connectDB();
 
-
 // Test route to verify routes work
 app.get("/test-profile", (req, res) => {
   res.json({ message: "Profile route test works" });
 });
 
-
-/// Add this route to your existing backend
-app.get('/api/check-registration/:scholarId', async (req, res) => {
+/* ------------------ DEBUG ROUTE ------------------ */
+app.get("/api/debug/check/:scholarId", async (req, res) => {
   try {
     const { scholarId } = req.params;
+    console.log("🔍 Debug check for scholarId:", scholarId);
     
-    // Check your database if this scholarId exists WITH EMAIL
-    const student = await Student.findOne({ 
-      scholarId: scholarId 
-    });
+    const student = await Student.findOne({ scholarId });
+    console.log("Student found:", student ? "YES" : "NO");
+    console.log("Student email:", student?.email);
     
-    // Return true only if student exists AND has email
     const isFullyRegistered = !!(student && student.email);
     
     res.json({ 
-      isRegistered: isFullyRegistered,
-      message: isFullyRegistered ? "User is registered" : "User not registered or registration incomplete"
+      scholarId,
+      studentExists: !!student,
+      hasEmail: !!student?.email,
+      isFullyRegistered,
+      studentData: student
+    });
+  } catch (error) {
+    console.error("❌ Debug route error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/* ------------------ CHECK REGISTRATION ROUTE ------------------ */
+app.get('/api/check-registration/:scholarId', async (req, res) => {
+  try {
+    const { scholarId } = req.params;
+    console.log("🔍 Checking registration for:", scholarId);
+    
+    // Check if this scholarId exists
+    const student = await Student.findOne({ scholarId });
+    console.log("Student found:", student ? "YES" : "NO");
+    
+    if (!student) {
+      console.log("❌ Student not found at all");
+      return res.json({ 
+        isRegistered: false,
+        message: "Student not found in database"
+      });
+    }
+    
+    // Check if student has email (is fully registered)
+    const hasEmail = !!student.email;
+    console.log("📧 Student has email:", hasEmail, "Email:", student.email);
+    
+    res.json({ 
+      isRegistered: hasEmail,
+      message: hasEmail ? "User is registered" : "User found but not fully registered",
+      hasEmail: hasEmail
     });
     
   } catch (error) {
+    console.error("❌ Error checking registration:", error);
     res.status(500).json({ 
       isRegistered: false, 
       error: "Server error checking registration" 
@@ -48,7 +82,6 @@ app.get('/api/check-registration/:scholarId', async (req, res) => {
 });
 
 /* ------------------ HELPERS ------------------ */
-
 function getCurrentSemesterFromScholarId(scholarId) {
   if (!scholarId) return null;
 
@@ -74,32 +107,38 @@ function getBranchFromScholarId(scholarId) {
   }[code];
 }
 
-/* ------------------ HEALTH ------------------ */
-
+/* ------------------ HEALTH CHECK ------------------ */
 app.get("/", (req, res) => {
-  res.json({ status: "Backend running" });
+  res.json({ 
+    status: "Backend running",
+    message: "uniNITS Backend API",
+    version: "1.0.0"
+  });
 });
 
-
-
-/* ------------------ LOGIN ------------------ */
-
+/* ------------------ LOGIN ROUTE ------------------ */
 app.post("/api/login", async (req, res) => {
   try {
     const { scholarId } = req.body;
+    console.log("🔐 Login attempt for scholarId:", scholarId);
 
     const student = await Student.findOne({ scholarId });
     
     // Student not found at all
     if (!student) {
+      console.log("❌ Student not found");
       return res.status(404).json({ 
         success: false, 
         error: "Student not found. Please register first." 
       });
     }
     
+    console.log("📋 Student found:", student.scholarId);
+    console.log("📧 Student email:", student.email);
+    
     // Student found but doesn't have email (not fully registered)
     if (!student.email) {
+      console.log("⚠️ Student found but no email - not fully registered");
       return res.status(403).json({ 
         success: false, 
         error: "Registration incomplete. Please complete registration first.",
@@ -107,39 +146,39 @@ app.post("/api/login", async (req, res) => {
       });
     }
 
+    console.log("✅ Login successful for:", student.scholarId);
+    
     // Student is fully registered with email
     res.json({ 
       success: true, 
       student: {
         scholarId: student.scholarId,
-        name: student.name,
+        name: student.name || student.userName,
         email: student.email,
         userName: student.userName,
-        profileImage: student.profileImage,
-        cgpa: student.cgpa,
-        sgpa_curr: student.sgpa_curr,
-        sgpa_prev: student.sgpa_prev
+        profileImage: student.profileImage || "default.png",
+        cgpa: student.cgpa || 0,
+        sgpa_curr: student.sgpa_curr || 0,
+        sgpa_prev: student.sgpa_prev || 0
       }
     });
   } catch (err) {
+    console.error("🔥 Login error:", err);
     res.status(500).json({ 
       success: false, 
-      error: "Server error" 
+      error: "Server error during login" 
     });
   }
 });
 
-
-
-/* ------------------ REGISTER ------------------ */
-
+/* ------------------ REGISTER ROUTE ------------------ */
 app.post("/api/register", async (req, res) => {
   try {
     const { scholarId, email, userName } = req.body;
     
-    console.log("Registration attempt:", { scholarId, email, userName });
+    console.log("📝 Registration attempt:", { scholarId, email, userName });
     
-    // Validate input - stricter email validation
+    // Validate input
     if (!scholarId || !email || !userName) {
       return res.status(400).json({ 
         success: false, 
@@ -160,7 +199,7 @@ app.post("/api/register", async (req, res) => {
     
     if (student) {
       // Update existing student - set email and userName
-      console.log("Student exists, completing registration...");
+      console.log("🔄 Student exists, completing registration...");
       
       student.email = email;
       student.userName = userName;
@@ -168,17 +207,26 @@ app.post("/api/register", async (req, res) => {
       
       await student.save();
       
-      console.log("Registration completed for existing student:", student.scholarId);
+      console.log("✅ Registration completed for existing student:", student.scholarId);
       
       return res.json({ 
         success: true, 
         message: "Registration completed successfully",
-        student: student
+        student: {
+          scholarId: student.scholarId,
+          name: student.name,
+          email: student.email,
+          userName: student.userName,
+          profileImage: student.profileImage || "default.png",
+          cgpa: student.cgpa || 0,
+          sgpa_curr: student.sgpa_curr || 0,
+          sgpa_prev: student.sgpa_prev || 0
+        }
       });
     }
     
     // Create new student
-    console.log("Creating new student...");
+    console.log("🆕 Creating new student...");
     
     const newStudent = new Student({
       scholarId,
@@ -193,16 +241,25 @@ app.post("/api/register", async (req, res) => {
     
     await newStudent.save();
     
-    console.log("New student created successfully:", newStudent.scholarId);
+    console.log("✅ New student created successfully:", newStudent.scholarId);
     
     res.json({ 
       success: true, 
       message: "Registration successful",
-      student: newStudent
+      student: {
+        scholarId: newStudent.scholarId,
+        name: newStudent.name,
+        email: newStudent.email,
+        userName: newStudent.userName,
+        profileImage: newStudent.profileImage || "default.png",
+        cgpa: newStudent.cgpa || 0,
+        sgpa_curr: newStudent.sgpa_curr || 0,
+        sgpa_prev: newStudent.sgpa_prev || 0
+      }
     });
     
   } catch (err) {
-    console.error("Registration error:", err);
+    console.error("❌ Registration error:", err);
     res.status(500).json({ 
       success: false, 
       error: "Registration failed. Please try again." 
@@ -210,8 +267,7 @@ app.post("/api/register", async (req, res) => {
   }
 });
 
-
-/* ------------------ PROFILE ------------------ */
+/* ------------------ PROFILE ROUTE ------------------ */
 app.get("/api/profile/:scholarId", async (req, res) => {
   console.log("📢 PROFILE ROUTE HIT with scholarId:", req.params.scholarId);
   
@@ -222,7 +278,7 @@ app.get("/api/profile/:scholarId", async (req, res) => {
     const student = await Student.findOne({ scholarId });
     console.log("Student found:", student ? "YES" : "NO");
 
-    if (!student) return res.status(404).json({ error: "Not found" });
+    if (!student) return res.status(404).json({ error: "Student not found" });
 
     const semester = getCurrentSemesterFromScholarId(scholarId);
     const branchShort = getBranchFromScholarId(scholarId);
@@ -230,24 +286,35 @@ app.get("/api/profile/:scholarId", async (req, res) => {
     console.log("Semester:", semester, "Branch:", branchShort);
 
     res.json({
-      student,
+      student: {
+        scholarId: student.scholarId,
+        name: student.name || student.userName,
+        email: student.email,
+        userName: student.userName,
+        profileImage: student.profileImage || "default.png",
+        cgpa: student.cgpa || 0,
+        sgpa_curr: student.sgpa_curr || 0,
+        sgpa_prev: student.sgpa_prev || 0
+      },
       semester,
       branchShort
     });
   } catch (err) {
-    console.error("Profile route error:", err);
+    console.error("❌ Profile route error:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
 
-/* ------------------ COURSES ------------------ */
-
+/* ------------------ COURSES ROUTE ------------------ */
 app.get("/api/courses/:scholarId", async (req, res) => {
   try {
     const { scholarId } = req.params;
+    console.log("📚 Courses request for:", scholarId);
 
     const semester = getCurrentSemesterFromScholarId(scholarId);
     const branchCode = Number(scholarId.toString()[3]);
+
+    console.log("Semester:", semester, "Branch code:", branchCode);
 
     const current = await Course.findOne({
       branchCode,
@@ -261,21 +328,30 @@ app.get("/api/courses/:scholarId", async (req, res) => {
       allCourses: all
     });
   } catch (err) {
+    console.error("❌ Courses route error:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
 
-/* ------------------ ATTENDANCE ------------------ */
-
+/* ------------------ ATTENDANCE ROUTES ------------------ */
 app.get("/api/attendance/:scholarId", async (req, res) => {
   try {
-    const doc = await Attendance.findOne({
-      scholarId: req.params.scholarId
-    });
+    const { scholarId } = req.params;
+    console.log("📊 Attendance request for:", scholarId);
+    
+    const doc = await Attendance.findOne({ scholarId });
 
-    if (!doc) return res.json({ attendance: [] });
+    if (!doc) {
+      console.log("No attendance record found, returning empty array");
+      return res.json({ 
+        scholarId,
+        attendance: [] 
+      });
+    }
+    
     res.json(doc);
   } catch (err) {
+    console.error("❌ Attendance get error:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
@@ -283,10 +359,12 @@ app.get("/api/attendance/:scholarId", async (req, res) => {
 app.post("/api/attendance/update", async (req, res) => {
   try {
     const { scholarId, subjectCode, total, attended } = req.body;
+    console.log("📝 Attendance update for:", scholarId, subjectCode);
 
     let doc = await Attendance.findOne({ scholarId });
     if (!doc) {
       doc = new Attendance({ scholarId, attendance: [] });
+      console.log("Created new attendance record");
     }
 
     const idx = doc.attendance.findIndex(
@@ -295,21 +373,24 @@ app.post("/api/attendance/update", async (req, res) => {
 
     if (idx === -1) {
       doc.attendance.push({ subjectCode, total, attended });
+      console.log("Added new subject:", subjectCode);
     } else {
       doc.attendance[idx].total = total;
       doc.attendance[idx].attended = attended;
+      console.log("Updated existing subject:", subjectCode);
     }
 
     await doc.save();
+    console.log("✅ Attendance saved successfully");
     res.json({ success: true });
   } catch (err) {
+    console.error("❌ Attendance update error:", err);
     res.status(500).json({ error: "Update failed" });
   }
 });
 
-/* ------------------ START ------------------ */
-
+/* ------------------ START SERVER ------------------ */
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () =>
-  console.log("Backend running on port", PORT)
+  console.log(`🚀 Backend running on port ${PORT}`)
 );
