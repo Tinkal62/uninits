@@ -85,14 +85,109 @@ app.post("/api/login", async (req, res) => {
 
     const student = await Student.findOne({ scholarId });
     if (!student) {
-      return res.status(404).json({ error: "Student not found" });
+      return res.status(404).json({ 
+        success: false, 
+        error: "Student not found" 
+      });
     }
 
-    res.json({ success: true, student });
+    // Make sure all fields are included
+    res.json({ 
+      success: true, 
+      student: {
+        scholarId: student.scholarId,
+        name: student.name,
+        email: student.email,
+        userName: student.userName,
+        profileImage: student.profileImage,
+        cgpa: student.cgpa,
+        sgpa_curr: student.sgpa_curr,
+        sgpa_prev: student.sgpa_prev
+      }
+    });
   } catch (err) {
-    res.status(500).json({ error: "Server error" });
+    res.status(500).json({ 
+      success: false, 
+      error: "Server error" 
+    });
   }
 });
+
+
+
+/* ------------------ REGISTER ------------------ */
+
+app.post("/api/register", async (req, res) => {
+  try {
+    const { scholarId, email, userName } = req.body;
+    
+    console.log("Registration attempt:", { scholarId, email, userName });
+    
+    // Validate input
+    if (!scholarId || !email || !userName) {
+      return res.status(400).json({ 
+        success: false, 
+        error: "Missing required fields" 
+      });
+    }
+    
+    // Check if already exists
+    const existingStudent = await Student.findOne({ 
+      $or: [{ scholarId }, { email }] 
+    });
+    
+    if (existingStudent) {
+      // Update existing student (match your schema fields)
+      console.log("Student exists, updating...");
+      
+      existingStudent.email = email;
+      existingStudent.userName = userName;
+      existingStudent.name = userName; // Also update name field
+      
+      await existingStudent.save();
+      
+      return res.json({ 
+        success: true, 
+        message: "Registration updated successfully",
+        student: existingStudent
+      });
+    }
+    
+    // Create new student (match your schema fields)
+    console.log("Creating new student...");
+    
+    const newStudent = new Student({
+      scholarId,
+      email,
+      userName,
+      name: userName, // Both name and userName
+      profileImage: "default.png", // Default from your schema
+      cgpa: 0,
+      sgpa_curr: 0,
+      sgpa_prev: 0
+      // createdAt and updatedAt will be added automatically by mongoose
+    });
+    
+    await newStudent.save();
+    
+    console.log("Student created successfully:", newStudent.scholarId);
+    
+    res.json({ 
+      success: true, 
+      message: "Registration successful",
+      student: newStudent
+    });
+    
+  } catch (err) {
+    console.error("Registration error:", err);
+    res.status(500).json({ 
+      success: false, 
+      error: "Registration failed. Please try again." 
+    });
+  }
+});
+
+
 
 /* ------------------ PROFILE ------------------ */
 app.get("/api/profile/:scholarId", async (req, res) => {
