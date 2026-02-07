@@ -70,16 +70,22 @@ app.post("/api/login", async (req, res) => {
 });
 
 /* ------------------ PROFILE ------------------ */
-
 app.get("/api/profile/:scholarId", async (req, res) => {
+  console.log("📢 PROFILE ROUTE HIT with scholarId:", req.params.scholarId);
+  
   try {
     const { scholarId } = req.params;
+    console.log("Looking for student:", scholarId);
 
     const student = await Student.findOne({ scholarId });
+    console.log("Student found:", student ? "YES" : "NO");
+
     if (!student) return res.status(404).json({ error: "Not found" });
 
     const semester = getCurrentSemesterFromScholarId(scholarId);
     const branchShort = getBranchFromScholarId(scholarId);
+    
+    console.log("Semester:", semester, "Branch:", branchShort);
 
     res.json({
       student,
@@ -87,6 +93,7 @@ app.get("/api/profile/:scholarId", async (req, res) => {
       branchShort
     });
   } catch (err) {
+    console.error("Profile route error:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
