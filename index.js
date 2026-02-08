@@ -162,9 +162,9 @@ app.post("/api/login", async (req, res) => {
         email: student.email,
         userName: student.userName,
         profileImage: student.profileImage || "default.png",
-        cgpa: student.cgpa ,
-        sgpa_curr: student.sgpa_curr ,
-        sgpa_prev: student.sgpa_prev 
+        cgpa: student.cgpa ?? 0,
+        sgpa_curr: student.sgpa_curr ?? 0,
+        sgpa_prev: student.sgpa_prev ?? 0
       }
     });
   } catch (err) {
@@ -223,9 +223,9 @@ app.post("/api/register", async (req, res) => {
           email: student.email,
           userName: student.userName,
           profileImage: student.profileImage || "default.png",
-          cgpa: student.cgpa ,
-          sgpa_curr: student.sgpa_curr ,
-          sgpa_prev: student.sgpa_prev 
+          cgpa: student.cgpa ?? 0,
+          sgpa_curr: student.sgpa_curr ?? 0,
+          sgpa_prev: student.sgpa_prev ?? 0
         }
       });
     }
@@ -257,9 +257,9 @@ app.post("/api/register", async (req, res) => {
         email: newStudent.email,
         userName: newStudent.userName,
         profileImage: newStudent.profileImage || "default.png",
-        cgpa: newStudent.cgpa,
-        sgpa_curr: newStudent.sgpa_curr,
-        sgpa_prev: newStudent.sgpa_prev
+        cgpa: newStudent.cgpa ?? 0,
+        sgpa_curr: newStudent.sgpa_curr ?? 0,
+        sgpa_prev: newStudent.sgpa_prev ?? 0
       }
     });
     
@@ -297,9 +297,9 @@ app.get("/api/profile/:scholarId", async (req, res) => {
         email: student.email,
         userName: student.userName,
         profileImage: student.profileImage || "default.png",
-        cgpa: student.cgpa ,
-        sgpa_curr: student.sgpa_curr ,
-        sgpa_prev: student.sgpa_prev
+        cgpa: student.cgpa ?? 0,
+        sgpa_curr: student.sgpa_curr ?? 0,
+        sgpa_prev: student.sgpa_prev ?? 0
       },
       semester,
       branchShort
