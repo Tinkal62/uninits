@@ -12,7 +12,6 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -45,6 +44,41 @@ app.get("/api/debug/check/:scholarId", async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Debug route error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/* ------------------ CHECK STUDENT DATA DEBUG ROUTE ------------------ */
+app.get("/api/debug/student/:scholarId", async (req, res) => {
+  try {
+    const { scholarId } = req.params;
+    console.log("🔍 DEBUG: Checking full student data for:", scholarId);
+    
+    const student = await Student.findOne({ scholarId });
+    
+    if (!student) {
+      return res.json({ 
+        exists: false,
+        message: "Student not found" 
+      });
+    }
+    
+    // Convert to plain object to see all fields
+    const studentData = student.toObject();
+    
+    console.log("📊 Full student data:", JSON.stringify(studentData, null, 2));
+    
+    res.json({
+      exists: true,
+      rawData: studentData,
+      profileImage: studentData.profileImage,
+      cgpa: studentData.cgpa,
+      sgpa_curr: studentData.sgpa_curr,
+      sgpa_prev: studentData.sgpa_prev
+    });
+    
+  } catch (error) {
+    console.error("❌ Debug error:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -272,10 +306,7 @@ app.post("/api/register", async (req, res) => {
   }
 });
 
-
-
-
-/* ------------------ PROFILE ROUTE ------------------ */
+/* ------------------ PROFILE ROUTE (FIXED) ------------------ */
 app.get("/api/profile/:scholarId", async (req, res) => {
   console.log("📢 PROFILE ROUTE HIT with scholarId:", req.params.scholarId);
   
@@ -292,22 +323,36 @@ app.get("/api/profile/:scholarId", async (req, res) => {
     const branchShort = getBranchFromScholarId(scholarId);
     
     console.log("Semester:", semester, "Branch:", branchShort);
-    console.log("Student GPA data:", {
+    console.log("Student GPA data (raw):", {
       cgpa: student.cgpa,
       sgpa_curr: student.sgpa_curr,
       sgpa_prev: student.sgpa_prev
     });
 
+    // FIX: Handle "undefined" filename properly
+    let profileImage = student.profileImage;
+    if (profileImage && (profileImage === "undefined" || profileImage.startsWith("undefined-"))) {
+      console.log("⚠️ Fixing undefined profile image for:", scholarId);
+      profileImage = "default.png";
+      
+      // Optionally update the database
+      await Student.updateOne(
+        { scholarId },
+        { $set: { profileImage: "default.png" } }
+      );
+    }
+
+    // FIX: Don't use || 0 for GPA values as 0 is a valid value
     res.json({
       student: {
         scholarId: student.scholarId,
         name: student.name || student.userName,
         email: student.email,
         userName: student.userName,
-        profileImage: student.profileImage || "default.png",
-        cgpa: student.cgpa || 0,  // Ensure this is included
-        sgpa_curr: student.sgpa_curr || 0,  // Ensure this is included
-        sgpa_prev: student.sgpa_prev || 0   // Ensure this is included
+        profileImage: profileImage || "default.png",  // Fixed profile image
+        cgpa: student.cgpa,  // Removed || 0 to preserve actual 0 values
+        sgpa_curr: student.sgpa_curr,  // Removed || 0
+        sgpa_prev: student.sgpa_prev  // Removed || 0
       },
       semester,
       branchShort
@@ -317,8 +362,6 @@ app.get("/api/profile/:scholarId", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
-
-
 
 /* ------------------ COURSES ROUTE ------------------ */
 app.get("/api/courses/:scholarId", async (req, res) => {
@@ -404,9 +447,6 @@ app.post("/api/attendance/update", async (req, res) => {
   }
 });
 
-
-
-
 /* ------------------ PROFILE PICTURE UPLOAD ------------------ */
 
 // Configure storage for profile pictures
@@ -424,7 +464,15 @@ const storage = multer.diskStorage({
     const scholarId = req.body.scholarId;
     const timestamp = Date.now();
     const ext = path.extname(file.originalname);
+    
+    // FIX: Validate scholarId before using it
+    if (!scholarId || scholarId === 'undefined') {
+      console.error("❌ Invalid scholarId during file upload:", scholarId);
+      return cb(new Error('Invalid scholarId'), false);
+    }
+    
     const filename = `${scholarId}-${timestamp}${ext}`;
+    console.log("📁 Saving file as:", filename);
     cb(null, filename);
   }
 });
@@ -449,26 +497,45 @@ const upload = multer({
 // Serve uploaded images statically
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Profile picture upload route
+// Profile picture upload route (IMPROVED)
 app.post('/api/profile/upload-photo', upload.single('profileImage'), async (req, res) => {
   try {
+    console.log("📸 Profile picture upload request received");
+    console.log("Request body:", req.body);
+    
     const { scholarId } = req.body;
     
-    if (!scholarId) {
-      return res.status(400).json({ error: 'Scholar ID is required' });
+    if (!scholarId || scholarId === 'undefined') {
+      console.error("❌ Invalid scholarId:", scholarId);
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Valid Scholar ID is required' 
+      });
     }
     
     if (!req.file) {
-      return res.status(400).json({ error: 'No image file uploaded' });
+      console.error("❌ No file uploaded");
+      return res.status(400).json({ 
+        success: false, 
+        error: 'No image file uploaded' 
+      });
     }
     
-    console.log('📸 Profile picture upload for:', scholarId);
-    console.log('File saved as:', req.file.filename);
+    console.log('📸 Profile picture upload for scholarId:', scholarId);
+    console.log('✅ File saved as:', req.file.filename);
     
     // Update student record in database with new profile picture filename
     const student = await Student.findOne({ scholarId });
     if (!student) {
-      return res.status(404).json({ error: 'Student not found' });
+      console.error("❌ Student not found in database:", scholarId);
+      // Clean up uploaded file
+      if (req.file && req.file.path) {
+        fs.unlinkSync(req.file.path);
+      }
+      return res.status(404).json({ 
+        success: false,
+        error: 'Student not found' 
+      });
     }
     
     // Delete old profile picture if it exists and is not default
@@ -484,7 +551,7 @@ app.post('/api/profile/upload-photo', upload.single('profileImage'), async (req,
     student.profileImage = req.file.filename;
     await student.save();
     
-    console.log('✅ Profile picture updated for:', scholarId);
+    console.log('✅ Profile picture updated in database for:', scholarId);
     
     res.json({
       success: true,
@@ -498,7 +565,12 @@ app.post('/api/profile/upload-photo', upload.single('profileImage'), async (req,
     
     // Delete uploaded file if there was an error
     if (req.file && req.file.path) {
-      fs.unlinkSync(req.file.path);
+      try {
+        fs.unlinkSync(req.file.path);
+        console.log('🗑️ Cleaned up uploaded file due to error');
+      } catch (cleanupError) {
+        console.error('Error cleaning up file:', cleanupError);
+      }
     }
     
     res.status(500).json({ 
@@ -511,7 +583,37 @@ app.post('/api/profile/upload-photo', upload.single('profileImage'), async (req,
 // Serve default images from assets
 app.use('/assets/images', express.static(path.join(__dirname, 'assets/images')));
 
-
+/* ------------------ FIX UNDEFINED PROFILE IMAGES ROUTE ------------------ */
+app.post('/api/fix-profile-images', async (req, res) => {
+  try {
+    console.log("🔧 Fixing undefined profile images...");
+    
+    const result = await Student.updateMany(
+      { 
+        $or: [
+          { profileImage: { $regex: /^undefined/ } },
+          { profileImage: "undefined" }
+        ]
+      },
+      { $set: { profileImage: "default.png" } }
+    );
+    
+    console.log(`✅ Fixed ${result.modifiedCount} profile images`);
+    
+    res.json({
+      success: true,
+      message: `Fixed ${result.modifiedCount} profile images`,
+      modifiedCount: result.modifiedCount
+    });
+    
+  } catch (error) {
+    console.error('❌ Error fixing profile images:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fix profile images' 
+    });
+  }
+});
 
 /* ------------------ START SERVER ------------------ */
 const PORT = process.env.PORT || 10000;
