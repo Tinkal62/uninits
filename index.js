@@ -272,6 +272,9 @@ app.post("/api/register", async (req, res) => {
   }
 });
 
+
+
+
 /* ------------------ PROFILE ROUTE ------------------ */
 app.get("/api/profile/:scholarId", async (req, res) => {
   console.log("📢 PROFILE ROUTE HIT with scholarId:", req.params.scholarId);
@@ -289,6 +292,11 @@ app.get("/api/profile/:scholarId", async (req, res) => {
     const branchShort = getBranchFromScholarId(scholarId);
     
     console.log("Semester:", semester, "Branch:", branchShort);
+    console.log("Student GPA data:", {
+      cgpa: student.cgpa,
+      sgpa_curr: student.sgpa_curr,
+      sgpa_prev: student.sgpa_prev
+    });
 
     res.json({
       student: {
@@ -297,9 +305,9 @@ app.get("/api/profile/:scholarId", async (req, res) => {
         email: student.email,
         userName: student.userName,
         profileImage: student.profileImage || "default.png",
-        cgpa: student.cgpa || 0,
-        sgpa_curr: student.sgpa_curr || 0,
-        sgpa_prev: student.sgpa_prev || 0
+        cgpa: student.cgpa || 0,  // Ensure this is included
+        sgpa_curr: student.sgpa_curr || 0,  // Ensure this is included
+        sgpa_prev: student.sgpa_prev || 0   // Ensure this is included
       },
       semester,
       branchShort
@@ -309,6 +317,8 @@ app.get("/api/profile/:scholarId", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
+
 
 /* ------------------ COURSES ROUTE ------------------ */
 app.get("/api/courses/:scholarId", async (req, res) => {
