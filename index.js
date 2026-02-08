@@ -8,6 +8,11 @@ const Student = require("./db/student.schema");
 const Course = require("./db/course.schema");
 const Attendance = require("./db/attendance.schema");
 
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -388,6 +393,115 @@ app.post("/api/attendance/update", async (req, res) => {
     res.status(500).json({ error: "Update failed" });
   }
 });
+
+
+
+
+/* ------------------ PROFILE PICTURE UPLOAD ------------------ */
+
+// Configure storage for profile pictures
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    // Create uploads directory if it doesn't exist
+    const uploadDir = path.join(__dirname, 'uploads/profile-images');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    // Generate unique filename: scholarId-timestamp.extension
+    const scholarId = req.body.scholarId;
+    const timestamp = Date.now();
+    const ext = path.extname(file.originalname);
+    const filename = `${scholarId}-${timestamp}${ext}`;
+    cb(null, filename);
+  }
+});
+
+// File filter to accept only images
+const fileFilter = (req, file, cb) => {
+  if (file.mimetype.startsWith('image/')) {
+    cb(null, true);
+  } else {
+    cb(new Error('Not an image! Please upload only images.'), false);
+  }
+};
+
+const upload = multer({
+  storage: storage,
+  fileFilter: fileFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  }
+});
+
+// Serve uploaded images statically
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Profile picture upload route
+app.post('/api/profile/upload-photo', upload.single('profileImage'), async (req, res) => {
+  try {
+    const { scholarId } = req.body;
+    
+    if (!scholarId) {
+      return res.status(400).json({ error: 'Scholar ID is required' });
+    }
+    
+    if (!req.file) {
+      return res.status(400).json({ error: 'No image file uploaded' });
+    }
+    
+    console.log('📸 Profile picture upload for:', scholarId);
+    console.log('File saved as:', req.file.filename);
+    
+    // Update student record in database with new profile picture filename
+    const student = await Student.findOne({ scholarId });
+    if (!student) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+    
+    // Delete old profile picture if it exists and is not default
+    if (student.profileImage && student.profileImage !== 'default.png') {
+      const oldImagePath = path.join(__dirname, 'uploads/profile-images', student.profileImage);
+      if (fs.existsSync(oldImagePath)) {
+        fs.unlinkSync(oldImagePath);
+        console.log('🗑️ Deleted old profile picture:', student.profileImage);
+      }
+    }
+    
+    // Update student record
+    student.profileImage = req.file.filename;
+    await student.save();
+    
+    console.log('✅ Profile picture updated for:', scholarId);
+    
+    res.json({
+      success: true,
+      message: 'Profile picture uploaded successfully',
+      filename: req.file.filename,
+      url: `/uploads/profile-images/${req.file.filename}`
+    });
+    
+  } catch (error) {
+    console.error('❌ Profile picture upload error:', error);
+    
+    // Delete uploaded file if there was an error
+    if (req.file && req.file.path) {
+      fs.unlinkSync(req.file.path);
+    }
+    
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to upload profile picture' 
+    });
+  }
+});
+
+// Serve default images from assets
+app.use('/assets/images', express.static(path.join(__dirname, 'assets/images')));
+
+
 
 /* ------------------ START SERVER ------------------ */
 const PORT = process.env.PORT || 10000;
