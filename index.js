@@ -163,20 +163,119 @@ app.post("/api/register", async (req, res) => {
   }
 });
 
-// ------------------ PROFILE ROUTE ------------------
+
+
+
+
+
+
+// ------------------ TEST ROUTE - CHECK DATABASE DIRECTLY ------------------
+app.get("/api/test/student/:scholarId", async (req, res) => {
+  try {
+    const { scholarId } = req.params;
+    
+    // Try all possible matches
+    const student = await Student.findOne({
+      $or: [
+        { scholarId: scholarId },
+        { scholarId: Number(scholarId) }
+      ]
+    });
+    
+    if (!student) {
+      return res.json({ error: "Student not found" });
+    }
+    
+    // Return RAW MongoDB document
+    res.json({
+      message: "Raw student data from database",
+      scholarId: student.scholarId,
+      scholarId_type: typeof student.scholarId,
+      name: student.name,
+      cgpa: student.cgpa,
+      cgpa_type: typeof student.cgpa,
+      sgpa_curr: student.sgpa_curr,
+      sgpa_curr_type: typeof student.sgpa_curr,
+      sgpa_prev: student.sgpa_prev,
+      sgpa_prev_type: typeof student.sgpa_prev,
+      full_document: student
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
+
+
+
+// ------------------ PROFILE ROUTE - STRICT DEBUG VERSION ------------------
 app.get("/api/profile/:scholarId", async (req, res) => {
   try {
     const { scholarId } = req.params;
-    const student = await findStudentSafe(scholarId);
+    console.log("========== PROFILE ROUTE DEBUG ==========");
+    console.log("1. Looking for scholarId:", scholarId, "Type:", typeof scholarId);
+    
+    // Try MULTIPLE ways to find the student
+    let student = null;
+    
+    // Method 1: Direct string
+    student = await Student.findOne({ scholarId: scholarId });
+    if (student) console.log("✅ Found with string match");
+    
+    // Method 2: Direct number
+    if (!student) {
+      student = await Student.findOne({ scholarId: Number(scholarId) });
+      if (student) console.log("✅ Found with number match");
+    }
+    
+    // Method 3: Using $or
+    if (!student) {
+      student = await Student.findOne({
+        $or: [
+          { scholarId: scholarId },
+          { scholarId: Number(scholarId) }
+        ]
+      });
+      if (student) console.log("✅ Found with $or");
+    }
 
     if (!student) {
+      console.log("❌ Student NOT FOUND in database");
       return res.status(404).json({ error: "Student not found" });
     }
+
+    console.log("2. STUDENT FOUND IN DATABASE:");
+    console.log("   - scholarId:", student.scholarId);
+    console.log("   - name:", student.name);
+    console.log("   - email:", student.email);
+    console.log("   - profileImage:", student.profileImage);
+    console.log("   - cgpa RAW:", student.cgpa);
+    console.log("   - sgpa_curr RAW:", student.sgpa_curr);
+    console.log("   - sgpa_prev RAW:", student.sgpa_prev);
+    console.log("   - Type of cgpa:", typeof student.cgpa);
+    console.log("   - Value of cgpa:", student.cgpa);
+    
+    // Check if values are actually there
+    if (student.cgpa === 0 || student.cgpa === null || student.cgpa === undefined) {
+      console.log("⚠️ WARNING: cgpa is 0/null/undefined in database!");
+    }
+    
+    // MANUALLY SET VALUES FOR TESTING - REMOVE AFTER FIXED
+    // If database has values but they're not coming through, uncomment these lines:
+    /*
+    if (scholarId.toString() === "2415062") {
+      student.cgpa = 7.58;
+      student.sgpa_curr = 8.21;
+      student.sgpa_prev = 8.22;
+      console.log("🔧 MANUALLY SET TEST VALUES");
+    }
+    */
 
     const semester = getCurrentSemesterFromScholarId(scholarId);
     const branchShort = getBranchFromScholarId(scholarId);
 
-    res.json({
+    const responseData = {
       student: {
         scholarId: student.scholarId,
         name: student.name || student.userName,
@@ -189,12 +288,20 @@ app.get("/api/profile/:scholarId", async (req, res) => {
       },
       semester,
       branchShort
-    });
+    };
+
+    console.log("3. SENDING TO FRONTEND:", JSON.stringify(responseData, null, 2));
+    console.log("==========================================");
+
+    res.json(responseData);
   } catch (err) {
     console.error("❌ Profile route error:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
+
+
+
 
 // ------------------ COURSES ROUTE ------------------
 app.get("/api/courses/:scholarId", async (req, res) => {
