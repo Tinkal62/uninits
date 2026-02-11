@@ -333,6 +333,10 @@ app.post("/api/register", async (req, res) => {
   }
 });
 
+
+
+
+
 /* ------------------ PROFILE ROUTE ------------------ */
 app.get("/api/profile/:scholarId", async (req, res) => {
   console.log("📢 PROFILE ROUTE HIT with scholarId:", req.params.scholarId);
@@ -350,7 +354,22 @@ app.get("/api/profile/:scholarId", async (req, res) => {
     const semester = getCurrentSemesterFromScholarId(scholarId);
     const branchShort = getBranchFromScholarId(scholarId);
     
-    console.log("Semester:", semester, "Branch:", branchShort);
+    // DEBUG: Log the actual values from database
+    console.log("📊 DATABASE VALUES - Raw student data:", {
+      cgpa: student.cgpa,
+      sgpa_curr: student.sgpa_curr,
+      sgpa_prev: student.sgpa_prev,
+      type_cgpa: typeof student.cgpa,
+      type_sgpa_curr: typeof student.sgpa_curr,
+      type_sgpa_prev: typeof student.sgpa_prev
+    });
+
+    // ENSURE values are sent as numbers, not null/undefined
+    const cgpa = student.cgpa !== undefined && student.cgpa !== null ? Number(student.cgpa) : 0;
+    const sgpa_curr = student.sgpa_curr !== undefined && student.sgpa_curr !== null ? Number(student.sgpa_curr) : 0;
+    const sgpa_prev = student.sgpa_prev !== undefined && student.sgpa_prev !== null ? Number(student.sgpa_prev) : 0;
+
+    console.log("📤 SENDING to frontend:", { cgpa, sgpa_curr, sgpa_prev });
 
     res.json({
       student: {
@@ -359,9 +378,9 @@ app.get("/api/profile/:scholarId", async (req, res) => {
         email: student.email,
         userName: student.userName,
         profileImage: student.profileImage || "default.png",
-        cgpa: student.cgpa,
-        sgpa_curr: student.sgpa_curr,
-        sgpa_prev: student.sgpa_prev
+        cgpa: cgpa,
+        sgpa_curr: sgpa_curr,
+        sgpa_prev: sgpa_prev
       },
       semester,
       branchShort
@@ -371,6 +390,11 @@ app.get("/api/profile/:scholarId", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
+
+
+
+
 
 /* ------------------ COURSES ROUTE ------------------ */
 app.get("/api/courses/:scholarId", async (req, res) => {
