@@ -2,6 +2,7 @@ require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
+const mongoose = require('mongoose');
 
 const connectDB = require("./db/connect");
 const Student = require("./db/student.schema");
@@ -50,7 +51,7 @@ app.get("/", (req, res) => {
 
 
 
-// ------------------ DEBUG: CHECK DATABASE CONNECTION ------------------
+/// ------------------ DEBUG: CHECK DATABASE CONNECTION ------------------
 app.get("/api/debug/db", async (req, res) => {
   try {
     const dbState = mongoose.connection.readyState;
@@ -69,6 +70,7 @@ app.get("/api/debug/db", async (req, res) => {
     
     res.json(info);
   } catch (error) {
+    console.error("Debug route error:", error);
     res.status(500).json({ error: error.message });
   }
 });
