@@ -35,6 +35,52 @@ app.get("/test-profile", (req, res) => {
   res.json({ message: "Profile route test works" });
 });
 
+
+
+
+
+
+
+/* ------------------ DEBUG GPA ROUTE ------------------ */
+app.get("/api/debug/gpa/:scholarId", async (req, res) => {
+  try {
+    const { scholarId } = req.params;
+    console.log("🔍 GPA Debug for scholarId:", scholarId);
+    
+    const student = await findStudentSafe(scholarId);
+    
+    if (!student) {
+      return res.json({ error: "Student not found" });
+    }
+    
+    // Return the raw MongoDB document
+    res.json({
+      scholarId: student.scholarId,
+      name: student.name,
+      // Show ALL fields that might contain GPA data
+      cgpa: student.cgpa,
+      CGPA: student.CGPA,
+      sgpa_curr: student.sgpa_curr,
+      sgpa_curr_type: typeof student.sgpa_curr,
+      sgpa_prev: student.sgpa_prev,
+      sgpaCurr: student.sgpaCurr,
+      sgpaPrev: student.sgpaPrev,
+      currentSGPA: student.currentSGPA,
+      previousSGPA: student.previousSGPA,
+      // Also show the full document for debugging
+      fullDocument: student
+    });
+  } catch (error) {
+    console.error("❌ GPA Debug error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
+
+
+
+
 /* ------------------ DEBUG ROUTE ------------------ */
 app.get("/api/debug/check/:scholarId", async (req, res) => {
   try {
