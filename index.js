@@ -46,6 +46,38 @@ app.get("/", (req, res) => {
   res.json({ status: "Backend running", message: "uniNITS Backend API" });
 });
 
+// ------------------ CHECK REGISTRATION ROUTE ------------------
+app.get('/api/check-registration/:scholarId', async (req, res) => {
+  try {
+    const { scholarId } = req.params;
+    console.log("🔍 Checking registration for:", scholarId);
+    
+    const student = await findStudentSafe(scholarId);
+    
+    if (!student) {
+      return res.json({ 
+        isRegistered: false,
+        message: "Student not found in database"
+      });
+    }
+    
+    const hasEmail = !!student.email;
+    
+    res.json({ 
+      isRegistered: hasEmail,
+      message: hasEmail ? "User is registered" : "User found but not fully registered",
+      hasEmail: hasEmail
+    });
+    
+  } catch (error) {
+    console.error("❌ Error checking registration:", error);
+    res.status(500).json({ 
+      isRegistered: false, 
+      error: "Server error checking registration" 
+    });
+  }
+});
+
 // ------------------ LOGIN ROUTE ------------------
 app.post("/api/login", async (req, res) => {
   try {
@@ -131,7 +163,7 @@ app.post("/api/register", async (req, res) => {
   }
 });
 
-// ------------------ PROFILE ROUTE - CRITICAL FIX ------------------
+// ------------------ PROFILE ROUTE ------------------
 app.get("/api/profile/:scholarId", async (req, res) => {
   try {
     const { scholarId } = req.params;
@@ -144,32 +176,20 @@ app.get("/api/profile/:scholarId", async (req, res) => {
     const semester = getCurrentSemesterFromScholarId(scholarId);
     const branchShort = getBranchFromScholarId(scholarId);
 
-    // DIRECT VALUE EXTRACTION - NO TRANSFORMATION
-    // These are the EXACT field names from your schema
-    const responseData = {
+    res.json({
       student: {
         scholarId: student.scholarId,
         name: student.name || student.userName,
         email: student.email,
         userName: student.userName,
         profileImage: student.profileImage || "default.png",
-        // DIRECT ASSIGNMENT - use exactly what's in the database
         cgpa: student.cgpa,
         sgpa_curr: student.sgpa_curr,
         sgpa_prev: student.sgpa_prev
       },
       semester,
       branchShort
-    };
-
-    console.log("✅ PROFILE RESPONSE:", {
-      scholarId: student.scholarId,
-      cgpa: student.cgpa,
-      sgpa_curr: student.sgpa_curr,
-      sgpa_prev: student.sgpa_prev
     });
-
-    res.json(responseData);
   } catch (err) {
     console.error("❌ Profile route error:", err);
     res.status(500).json({ error: "Server error" });
@@ -274,7 +294,6 @@ app.post('/api/profile/upload-photo', upload.single('profileImage'), async (req,
       return res.status(404).json({ error: 'Student not found' });
     }
 
-    // Delete old profile picture if exists
     if (student.profileImage && student.profileImage !== 'default.png') {
       const oldImagePath = path.join(__dirname, 'uploads/profile-images', student.profileImage);
       if (fs.existsSync(oldImagePath)) {
