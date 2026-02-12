@@ -135,6 +135,7 @@ JWT • Multer
 - Environment variable support
 
 
+---
 # 👨‍💻 Developer
 <div align="center">
 Tinkal Das
