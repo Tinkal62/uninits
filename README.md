@@ -121,3 +121,33 @@ JWT • Multer
 
 # 🚀 Deployment Architecture
 
+--
+
+
+### 🔹 Frontend
+- Firebase Hosting
+- CDN optimized
+- HTTPS secured
+
+### 🔹 Backend
+- Render Web Service
+- Auto-deploy on Git push
+- Environment variable support
+
+---
+
+# 👨‍💻 Developer
+<div align="center">
+Tinkal Das
+
+Computer Science & Engineering
+NIT Silchar
+
+<a href="https://github.com/Tinkal62"> <img src="https://img.shields.io/badge/GitHub-Tinkal62-181717?style=for-the-badge&logo=github"/> </a> <a href="https://www.linkedin.com/in/tinkal-das-734aa8325"> <img src="https://img.shields.io/badge/LinkedIn-Tinkal_Das-0077B5?style=for-the-badge&logo=linkedin"/> </a> </div>
+<div align="center">
+💙 Built for the NIT Silchar Community
+
+© 2026 uniNITS
+
+</div> ```
+
