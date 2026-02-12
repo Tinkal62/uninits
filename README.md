@@ -49,9 +49,9 @@ Instead of juggling multiple portals, students manage everything from **one unif
 
 ## 📊 Academic Dashboard
 - Real-time **Attendance Tracker**
-  - 🔴 Red – Below 75% (Critical)  
-  - 🟡 Yellow – 75–85% (Borderline)  
-  - 🟢 Green – Above 85% (Safe)  
+  - 🔴 Red – Below 50% (Critical)  
+  - 🟡 Yellow – 50–75% (Borderline)  
+  - 🟢 Green – Above 75% (Safe)  
 - SGPA / CGPA overview  
 - Semester-wise course history  
 
@@ -67,7 +67,7 @@ Instead of juggling multiple portals, students manage everything from **one unif
 
 ## 🏠 Campus Directory
 - 20+ Clubs & Societies  
-- 20+ Hostels with Warden details  
+- 10+ Hostels with Warden details  
 - Guest House information  
 - Mess menu display  
 
@@ -134,13 +134,12 @@ JWT • Multer
 - Auto-deploy on Git push
 - Environment variable support
 
----
 
 # 👨‍💻 Developer
 <div align="center">
 Tinkal Das
 
-Computer Science & Engineering
+Electronics & Instrumentation Engineering
 NIT Silchar
 
 <a href="https://github.com/Tinkal62"> <img src="https://img.shields.io/badge/GitHub-Tinkal62-181717?style=for-the-badge&logo=github"/> </a> <a href="https://www.linkedin.com/in/tinkal-das-734aa8325"> <img src="https://img.shields.io/badge/LinkedIn-Tinkal_Das-0077B5?style=for-the-badge&logo=linkedin"/> </a> </div>
@@ -149,5 +148,5 @@ NIT Silchar
 
 © 2026 uniNITS
 
-</div> ```
+</div>
 
