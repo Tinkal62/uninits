@@ -51,13 +51,66 @@ async function findStudentSafe(scholarId) {
 
 
 
-// Semester & Branch Helpers
+// Semester & Branch Helpers - UPDATED for alphanumeric IDs
 function getCurrentSemesterFromScholarId(scholarId) {
   if (!scholarId) return null;
-  const yearCode = scholarId.toString().slice(0, 2);
-  const semesterMap = { "22": 8, "23": 6, "24": 4, "25": 2 };
-  return semesterMap[yearCode] || null;
+  
+  const idStr = scholarId.toString();
+  
+  // Try to extract year code from different formats
+  let yearCode = null;
+  
+  // Format 1: "25EC10001" -> first 2 digits "25"
+  if (idStr.match(/^\d{2}/)) {
+    yearCode = idStr.substring(0, 2);
+  }
+  // Format 2: "2415062" -> first 2 digits "24"
+  else if (idStr.match(/^\d+$/)) {
+    yearCode = idStr.substring(0, 2);
+  }
+  
+  if (yearCode) {
+    const semesterMap = { "22": 8, "23": 6, "24": 4, "25": 2 };
+    return semesterMap[yearCode] || null;
+  }
+  
+  return null;
 }
+
+function getBranchFromScholarId(scholarId) {
+  if (!scholarId) return null;
+  
+  const idStr = scholarId.toString();
+  
+  // Format 1: "25EC10001" -> extract branch code from position 2-3? "EC"
+  if (idStr.length >= 4) {
+    const branchPart = idStr.substring(2, 4); // Get "EC" from "25EC10001"
+    
+    const branchMap = {
+      "CE": "CE", "CS": "CSE", "EE": "EE", "EC": "ECE", "EI": "EIE", "ME": "ME"
+    };
+    
+    if (branchMap[branchPart]) {
+      return branchMap[branchPart];
+    }
+  }
+  
+  // Format 2: "2415062" -> get 4th character as number
+  const code = Number(idStr[3]);
+  const numericBranchMap = {
+    1: "CE", 2: "CSE", 3: "EE", 4: "ECE", 5: "EIE", 6: "ME"
+  };
+  
+  if (!isNaN(code) && numericBranchMap[code]) {
+    return numericBranchMap[code];
+  }
+  
+  return null;
+}
+
+
+
+
 
 function getBranchFromScholarId(scholarId) {
   const code = Number(scholarId.toString()[3]);
@@ -289,32 +342,83 @@ app.get("/api/profile/:scholarId", async (req, res) => {
 
 
 
-// ------------------ COURSES ROUTE ------------------
+// ------------------ COURSES ROUTE - UPDATED for alphanumeric IDs ------------------
 app.get("/api/courses/:scholarId", async (req, res) => {
   try {
     const { scholarId } = req.params;
-    const semester = getCurrentSemesterFromScholarId(scholarId);
-    const branchCode = Number(scholarId.toString()[3]);
+    const idStr = scholarId.toString();
+    
+    console.log("📚 Courses request for:", idStr);
+    
+    // Get semester using updated helper
+    const semester = getCurrentSemesterFromScholarId(idStr);
+    
+    // Get branch code in format that matches your Course schema
+    let branchCode = null;
+    
+    // For alphanumeric IDs like "25EC10001"
+    if (idStr.length >= 4) {
+      const branchPart = idStr.substring(2, 4); // "EC"
+      const branchToCode = {
+        "CE": 1, "CS": 2, "EE": 3, "EC": 4, "EI": 5, "ME": 6
+      };
+      branchCode = branchToCode[branchPart];
+    }
+    
+    // For numeric IDs like "2415062"
+    if (branchCode === null) {
+      branchCode = Number(idStr[3]);
+    }
+    
+    console.log("Extracted - Semester:", semester, "BranchCode:", branchCode);
+    
+    if (!semester || !branchCode) {
+      return res.json({
+        currentSemesterCourses: [],
+        allCourses: [],
+        error: "Could not determine semester or branch from scholarId"
+      });
+    }
 
     const current = await Course.findOne({ branchCode, semester });
     const all = await Course.find({ branchCode }).sort({ semester: 1 });
 
+    console.log(`Found ${current?.courses?.length || 0} current courses`);
+    
     res.json({
       currentSemesterCourses: current?.courses || [],
-      allCourses: all
+      allCourses: all || []
     });
   } catch (err) {
-    res.status(500).json({ error: "Server error" });
+    console.error("❌ Courses route error:", err);
+    res.status(500).json({ error: "Server error", details: err.message });
   }
 });
 
-// ------------------ ATTENDANCE ROUTES ------------------
+
+
+
+
+
+// ------------------ ATTENDANCE ROUTES - UPDATED ------------------
 app.get("/api/attendance/:scholarId", async (req, res) => {
   try {
     const { scholarId } = req.params;
-    const doc = await Attendance.findOne({ scholarId });
-    res.json(doc || { scholarId, attendance: [] });
+    const searchId = scholarId.toString().trim();
+    
+    console.log("📊 Attendance request for:", searchId);
+    
+    // Try to find attendance with string ID first
+    let doc = await Attendance.findOne({ scholarId: searchId });
+    
+    // If not found and it's numeric, try as number
+    if (!doc && !isNaN(searchId)) {
+      doc = await Attendance.findOne({ scholarId: Number(searchId) });
+    }
+    
+    res.json(doc || { scholarId: searchId, attendance: [] });
   } catch (err) {
+    console.error("❌ Attendance get error:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
@@ -322,10 +426,20 @@ app.get("/api/attendance/:scholarId", async (req, res) => {
 app.post("/api/attendance/update", async (req, res) => {
   try {
     const { scholarId, subjectCode, total, attended } = req.body;
+    const searchId = scholarId.toString().trim();
+    
+    console.log("📝 Attendance update for:", searchId, subjectCode);
 
-    let doc = await Attendance.findOne({ scholarId });
+    // Try to find existing attendance record
+    let doc = await Attendance.findOne({ scholarId: searchId });
+    
+    // If not found and it's numeric, try as number
+    if (!doc && !isNaN(searchId)) {
+      doc = await Attendance.findOne({ scholarId: Number(searchId) });
+    }
+    
     if (!doc) {
-      doc = new Attendance({ scholarId, attendance: [] });
+      doc = new Attendance({ scholarId: searchId, attendance: [] });
     }
 
     const idx = doc.attendance.findIndex(s => s.subjectCode === subjectCode);
@@ -337,11 +451,20 @@ app.post("/api/attendance/update", async (req, res) => {
     }
 
     await doc.save();
+    console.log("✅ Attendance saved successfully");
     res.json({ success: true });
   } catch (err) {
+    console.error("❌ Attendance update error:", err);
     res.status(500).json({ error: "Update failed" });
   }
 });
+
+
+
+
+
+
+
 
 // ------------------ PROFILE PICTURE UPLOAD ------------------
 const storage = multer.diskStorage({
