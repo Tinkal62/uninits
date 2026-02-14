@@ -19,15 +19,37 @@ app.use(express.json());
 
 connectDB();
 
-// Helper to handle string/number scholarId
+
+
+// Helper to handle ALL scholarId formats (numbers AND alphanumeric)
 async function findStudentSafe(scholarId) {
+  // Convert input to string for consistent comparison
+  const searchId = scholarId.toString().trim();
+  
+  // Try exact string match first
+  let student = await Student.findOne({ scholarId: searchId });
+  if (student) return student;
+  
+  // Try as number (if it's numeric)
+  if (!isNaN(searchId) && searchId.trim() !== '') {
+    const numId = Number(searchId);
+    student = await Student.findOne({ scholarId: numId });
+    if (student) return student;
+  }
+  
+  // Try with $or for maximum flexibility
   return Student.findOne({
     $or: [
-      { scholarId: scholarId },
-      { scholarId: Number(scholarId) }
+      { scholarId: searchId },
+      { scholarId: { $regex: new RegExp(`^${searchId}$`, 'i') } } // Case-insensitive match
     ]
   });
 }
+
+
+
+
+
 
 // Semester & Branch Helpers
 function getCurrentSemesterFromScholarId(scholarId) {
@@ -83,17 +105,25 @@ app.get('/api/check-registration/:scholarId', async (req, res) => {
 
 
 
-// ------------------ LOGIN ROUTE - WITH DUPLICATE HANDLING ------------------
+// ------------------ LOGIN ROUTE - HANDLES BOTH FORMATS ------------------
 app.post("/api/login", async (req, res) => {
   try {
     const { scholarId } = req.body;
-    const numericScholarId = Number(scholarId);
+    const searchId = scholarId.toString().trim();
     
-    // Find the student with email (registered one)
+    // Find student with email (registered) - try string first
     let student = await Student.findOne({ 
-      scholarId: numericScholarId,
+      scholarId: searchId,
       email: { $exists: true, $ne: null }
     });
+
+    // If not found and it's numeric, try as number
+    if (!student && !isNaN(searchId)) {
+      student = await Student.findOne({ 
+        scholarId: Number(searchId),
+        email: { $exists: true, $ne: null }
+      });
+    }
 
     if (!student) {
       return res.status(404).json({ 
@@ -125,7 +155,7 @@ app.post("/api/login", async (req, res) => {
 
 
 
-// ------------------ REGISTER ROUTE - WITH DUPLICATE PREVENTION ------------------
+// ------------------ REGISTER ROUTE - HANDLES BOTH FORMATS ------------------
 app.post("/api/register", async (req, res) => {
   try {
     const { scholarId, email, userName } = req.body;
@@ -139,30 +169,27 @@ app.post("/api/register", async (req, res) => {
     }
 
     console.log("📝 Registration attempt for:", { scholarId, email, userName });
-    console.log("Current database:", mongoose.connection.db.databaseName);
-
-    // IMPORTANT: Convert scholarId to Number for consistent storage
-    const numericScholarId = Number(scholarId);
     
-    // FIRST: Delete ANY existing student with this scholarId that has NO email
-    // This cleans up the duplicate entries
+    // PRESERVE original format - DON'T convert to Number!
+    const originalScholarId = scholarId.toString().trim();
+    
+    // Delete incomplete records with SAME STRING ID
     const deleteResult = await Student.deleteMany({ 
-      scholarId: numericScholarId,
+      scholarId: originalScholarId,
       email: { $exists: false }
     });
     
     if (deleteResult.deletedCount > 0) {
-      console.log(`🗑️ Deleted ${deleteResult.deletedCount} incomplete student record(s)`);
+      console.log(`🗑️ Deleted ${deleteResult.deletedCount} incomplete record(s)`);
     }
     
-    // NOW find OR create the student
-    let student = await Student.findOne({ scholarId: numericScholarId });
+    // Find existing student with this ID (as string)
+    let student = await Student.findOne({ scholarId: originalScholarId });
 
     if (student) {
       console.log("🔄 Updating existing student:", student.scholarId);
-      console.log("Before update - email:", student.email, "CGPA:", student.cgpa);
       
-      // Preserve GPA values if they exist
+      // Preserve existing values
       const existingCGPA = student.cgpa;
       const existingSGPA_curr = student.sgpa_curr;
       const existingSGPA_prev = student.sgpa_prev;
@@ -171,20 +198,17 @@ app.post("/api/register", async (req, res) => {
       student.userName = userName;
       student.name = userName;
       
-      // Make sure we don't overwrite GPA with 0
       if (existingCGPA > 0) student.cgpa = existingCGPA;
       if (existingSGPA_curr > 0) student.sgpa_curr = existingSGPA_curr;
       if (existingSGPA_prev > 0) student.sgpa_prev = existingSGPA_prev;
       
       await student.save();
       
-      console.log("After update - email:", student.email, "CGPA:", student.cgpa);
-      
     } else {
-      console.log("🆕 Creating new student with scholarId:", numericScholarId);
+      console.log("🆕 Creating new student with ID:", originalScholarId);
       
       student = new Student({
-        scholarId: numericScholarId,
+        scholarId: originalScholarId, // Store as STRING
         email,
         userName,
         name: userName,
@@ -197,15 +221,8 @@ app.post("/api/register", async (req, res) => {
       await student.save();
     }
 
-    // Get the final student record
-    const savedStudent = await Student.findOne({ scholarId: numericScholarId });
+    const savedStudent = await Student.findOne({ scholarId: originalScholarId });
     
-    console.log("✅ Registration completed. Final record:", {
-      scholarId: savedStudent.scholarId,
-      email: savedStudent.email,
-      cgpa: savedStudent.cgpa
-    });
-
     res.json({
       success: true,
       message: "Registration successful",
@@ -227,65 +244,29 @@ app.post("/api/register", async (req, res) => {
   }
 });
 
-
-
-// ------------------ PROFILE ROUTE - STRICT DEBUG VERSION ------------------
+// ------------------ PROFILE ROUTE - HANDLES BOTH FORMATS ------------------
 app.get("/api/profile/:scholarId", async (req, res) => {
   try {
     const { scholarId } = req.params;
-    console.log("========== PROFILE ROUTE DEBUG ==========");
-    console.log("1. Looking for scholarId:", scholarId, "Type:", typeof scholarId);
+    const searchId = scholarId.toString().trim();
     
-    // Try MULTIPLE ways to find the student
-    let student = null;
+    console.log("🔍 Looking for scholarId:", searchId);
     
-    // Method 1: Direct string
-    student = await Student.findOne({ scholarId: scholarId });
-    if (student) console.log("✅ Found with string match");
+    // Try multiple matching strategies
+    let student = await Student.findOne({ scholarId: searchId });
     
-    // Method 2: Direct number
-    if (!student) {
-      student = await Student.findOne({ scholarId: Number(scholarId) });
-      if (student) console.log("✅ Found with number match");
+    if (!student && !isNaN(searchId)) {
+      student = await Student.findOne({ scholarId: Number(searchId) });
     }
     
-    // Method 3: Using $or
     if (!student) {
-      student = await Student.findOne({
-        $or: [
-          { scholarId: scholarId },
-          { scholarId: Number(scholarId) }
-        ]
-      });
-      if (student) console.log("✅ Found with $or");
-    }
-
-    if (!student) {
-      console.log("❌ Student NOT FOUND in database");
       return res.status(404).json({ error: "Student not found" });
     }
 
-    console.log("2. STUDENT FOUND IN DATABASE:");
-    console.log("   - scholarId:", student.scholarId);
-    console.log("   - name:", student.name);
-    console.log("   - email:", student.email);
-    console.log("   - profileImage:", student.profileImage);
-    console.log("   - cgpa RAW:", student.cgpa);
-    console.log("   - sgpa_curr RAW:", student.sgpa_curr);
-    console.log("   - sgpa_prev RAW:", student.sgpa_prev);
-    console.log("   - Type of cgpa:", typeof student.cgpa);
-    console.log("   - Value of cgpa:", student.cgpa);
-    
-    // Check if values are actually there
-    if (student.cgpa === 0 || student.cgpa === null || student.cgpa === undefined) {
-      console.log("⚠️ WARNING: cgpa is 0/null/undefined in database!");
-    }
-    
+    const semester = getCurrentSemesterFromScholarId(student.scholarId);
+    const branchShort = getBranchFromScholarId(student.scholarId);
 
-    const semester = getCurrentSemesterFromScholarId(scholarId);
-    const branchShort = getBranchFromScholarId(scholarId);
-
-    const responseData = {
+    res.json({
       student: {
         scholarId: student.scholarId,
         name: student.name || student.userName,
@@ -298,12 +279,7 @@ app.get("/api/profile/:scholarId", async (req, res) => {
       },
       semester,
       branchShort
-    };
-
-    console.log("3. SENDING TO FRONTEND:", JSON.stringify(responseData, null, 2));
-    console.log("==========================================");
-
-    res.json(responseData);
+    });
   } catch (err) {
     console.error("❌ Profile route error:", err);
     res.status(500).json({ error: "Server error" });
